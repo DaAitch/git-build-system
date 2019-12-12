@@ -1,9 +1,15 @@
 
+module.exports = {
+  readRefInfo,
+  readUnknown,
+  readStream
+};
+
 /**
  * @param {string} str 
  * @param {number} offset 
  */
-const readHex40 = (str, offset) => {
+function readHex40(str, offset) {
   if (str.length < 40) {
     return false;
   }
@@ -16,14 +22,14 @@ const readHex40 = (str, offset) => {
   }
 
   return [str.substr(offset, 40), offset + 40];
-};
+}
 
 /**
  * 
  * @param {string} str 
  * @param {number} offset 
  */
-const readWhitespace = (str, offset) => {
+function readWhitespace(str, offset) {
   let i;
   for (i = offset; i < str.length; i++) {
     switch (str[i]) {
@@ -42,13 +48,13 @@ const readWhitespace = (str, offset) => {
   }
 
   return [str.substring(offset, i), i];
-};
+}
 
 /**
  * @param {string} str 
  * @param {number} offset 
  */
-const readNullByteTerminated = (str, offset) => {
+function readNullByteTerminated(str, offset) {
   let i;
   for (i = offset; i < str.length; i++) {
     if (str[i] === '\u0000') {
@@ -57,61 +63,58 @@ const readNullByteTerminated = (str, offset) => {
   }
 
   return false;
-};
+}
 
 /**
  * @param {string} str 
  * @param {number} offset 
  */
-const readAll = (str, offset) => {
+function readAll(str, offset) {
   return [str.substr(offset), str.length];
-};
+}
 
 /**
  * @param {string} str 
  */
-exports.readRefInfo = str => {
+function readRefInfo(str) {
   let match;
   let offset = 0;
   let result;
 
-
+  // commit: mandatory
   if (!(result = readHex40(str, offset))) {
     return false;
   }
   [match, offset] = result;
   const commit = match;
 
-
+  // whitespace
   [match, offset] = readWhitespace(str, offset);
 
-
-  if (!(result = readHex40(str, offset))) {
-    return false;
+  // ref: optional
+  let ref = undefined;
+  if (result = readHex40(str, offset)) {
+    [match, offset] = result;
+    ref = match;
   }
-  [match, offset] = result;
-  const ref = match;
 
-
+  // whitespace
   [match, offset] = readWhitespace(str, offset);
 
-
+  // name: mandatory
   if (!(result = readNullByteTerminated(str, offset))) {
     return false;
   }
   [match, offset] = result;
   const name = match;
 
-
+  // whitespace
   [match, offset] = readWhitespace(str, offset);
 
-
-  if (!(result = readAll(str, offset))) {
-    return false;
-  }
+  // attributes: mandatory
+  result = readAll(str, offset);
   [match, offset] = result;
   const attr = match;
-
 
   return {
     commit,
@@ -124,7 +127,7 @@ exports.readRefInfo = str => {
 /**
  * @param {string} str 
  */
-exports.readUnknown = str => {
+function readUnknown(str) {
   let match;
   let offset = 0;
   let result;
@@ -167,7 +170,7 @@ exports.readUnknown = str => {
 /**
  * @param {string} str 
  */
-exports.readStream = str => {
+function readStream(str) {
   let type;
   switch (str[0]) {
     case '\u0001': {
