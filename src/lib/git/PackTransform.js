@@ -90,12 +90,9 @@ module.exports = class PackTransform extends stream.Transform {
   }
 
   _flush(callback) {
-    let err;
-    if (this._mode !== MODE_READPACK) {
-      err = new Error(`expected last mode to be PACK: didn't read 0000`);
-    }
+    this._debug('flush');
 
     this._mode = MODE_END;
-    return callback(err);
+    return callback();
   }
 }

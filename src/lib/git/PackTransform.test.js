@@ -73,14 +73,14 @@ test('should throw for invalid size', t => {
   pt.destroy();
 });
 
-test('should throw for no 0000', t => {
-  t.plan(1);
-
+test('should not throw for no 0000', t => {
   const {pt} = get(t);
 
-  pt.once('error', () => t.pass());
+  pt.once('error', () => t.fail());
   pt.write(Buffer.from('0008text'));
   pt.end();
+
+  t.pass();
 });
 
 test('should emit line and pack', function (t) {
