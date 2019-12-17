@@ -1,4 +1,5 @@
-const test = require('ava').default;
+const ava = require('ava');
+const test = ava.default;
 const PackTransform = require('./PackTransform');
 
 test.beforeEach(t => {
@@ -8,13 +9,6 @@ test.beforeEach(t => {
 
   Object.assign(t.context, {pt, arr});
 });
-
-/**
- * @return {{pt: PackTransform, arr: {type: string, value: string|Buffer}[]}}
- */
-function get(t) {
-  return t.context;
-}
 
 test('should read no line but pack', t => {
   const {pt, arr} = get(t);
@@ -65,5 +59,66 @@ test('should trim newlines at the end', t => {
   pt.write(Buffer.from('001b\nthis is a message\nX\n\n\n0000'));
   pt.end();
   t.is(arr.length, 1);
+
   t.deepEqual(arr[0], {type: 'line', value: 'this is a message\nX'});
 });
+
+test('should throw for invalid size', t => {
+  t.plan(1);
+
+  const {pt} = get(t);
+
+  pt.once('error', () => t.pass());
+  pt.write(Buffer.from('0008text000?error'));
+  pt.destroy();
+});
+
+test('should throw for no 0000', t => {
+  t.plan(1);
+
+  const {pt} = get(t);
+
+  pt.once('error', () => t.pass());
+  pt.write(Buffer.from('0008text'));
+  pt.end();
+});
+
+test('should emit line and pack', function (t) {
+  const {pt, arr} = get(t);
+
+  pt.write(Buffer.from('0008line0000this '));
+  pt.write(Buffer.from('\nis\t'));
+  pt.write(Buffer.from('the   pack\r'));
+  pt.end();
+
+  t.is(arr.length, 4);
+  assertLine(t, arr[0], 'line');
+  assertPack(t, arr[1], 'this ');
+  assertPack(t, arr[2], '\nis\t');
+  assertPack(t, arr[3], 'the   pack\r');
+});
+
+/**
+ * @return {{pt: PackTransform, arr: {type: string, value: string|Buffer}[]}}
+ */
+function get(t) {
+  return t.context;
+}
+
+/**
+ * @param {ava.ExecutionContext} t 
+ * @param {{type: string, value: string|Buffer}} item 
+ * @param {string} value 
+ */
+function assertLine(t, item, value) {
+  t.deepEqual(item, {type: 'line', value});
+}
+
+/**
+ * @param {ava.ExecutionContext} t 
+ * @param {{type: string, value: string|Buffer}} item 
+ * @param {string} value 
+ */
+function assertPack(t, item, value) {
+  t.deepEqual({type: item.type, value: item.value.toString()}, {type: 'pack', value});
+}

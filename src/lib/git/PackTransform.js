@@ -1,6 +1,13 @@
 const stream = require('stream');
 const debug = require('../debug')(__filename);
 
+const MODE_READSIZE = 1;
+const MODE_READLINE = 2;
+const MODE_READPACK = 3;
+const MODE_END = 4;
+
+const VALID_SIZE = /^[0-9a-f]{4}$/i;
+
 module.exports = class PackTransform extends stream.Transform {
 
   /**
@@ -10,93 +17,85 @@ module.exports = class PackTransform extends stream.Transform {
     super({readableObjectMode: true, writableObjectMode: false});
 
     this._logDirection = logDirection;
-    this._data = Buffer.from('');
-    this._readSize = undefined;
-
-    this._emptyStream = true;
+    this._data = Buffer.alloc(0);
+    this._mode = MODE_READSIZE;
   }
 
   _debug(msg, ...args) {
     debug(`%s: ${msg}`, this._logDirection, ...args);
   }
 
-  _pushLine(line) {
-    this._debug('%s: pushing line: %s', this._logDirection, line);
-    this.push({type: 'line', value: line});
-  }
+  _transform(chunk, encoding, callback) {
+    this._data = Buffer.concat([this._data, chunk]);
 
-  _pushPackChunk(packChunk) {
-    this._debug('%s: pushing pack: %s', this._logDirection, packChunk);
-    this.push({type: 'pack', value: packChunk});
-  }
-
-  _tick() {
-    while (1) {
-      if (this._readSize === undefined) {
-        if (this._data.length >= 4) {
-          const n = this._data.toString('ascii', 0, 4);
-          this._readSize = Number.parseInt(n, 16);
-
-          if (this._readSize === 0) {
-            // git packs ended, remove 0000
-            this._data = this._data.slice(4);
-            
-            // everything after 0000 pushed
-            if (this._data.length > 0) {
-              this._pushPackChunk(this._data);
-              this._data = Buffer.from('');
-            }
-
-            return;
-
-          } else if (this._readSize <= 4) {
-            return new Error(`read size ${this._readSize} is lower than or equal 4 not allowed`);
-          }
-
-        } else {
-          // data too small
-          return;
-        }
-      }
-
-      if (this._data.length < this._readSize) {
-        return;
-      }
-
-      const string = this._data.toString('utf8', 4, this._readSize);
-      this._pushLine(string.trim()); // trimmed
-      this._data = this._data.slice(this._readSize);
-      this._readSize = undefined;
+    if (this._mode === MODE_READSIZE) {
+      this._readSize(callback);
+    } else if (this._mode === MODE_READLINE) {
+      this._readLine(callback);
+    } else if (this._mode === MODE_READPACK) {
+      this._readPack(callback);
     }
   }
 
-  _transform(chunk, encoding, callback) {
-    this._emptyStream = false;
-    
-    // reading pack chunks
-    if (this._readSize !== 0) {
-      this._data = Buffer.concat([this._data, chunk]);
-      const err = this._tick();
-      callback(err);
+  _readSize(callback) {
+    if (this._data.length < 4) {
+      callback();
       return;
     }
 
-    // reading pack payload
-    this._pushPackChunk(chunk);
+    const stringSize = this._data.toString('ascii', 0, 4);
+    this._data = this._data.slice(4);
+
+    if (stringSize === '0000') {
+      this._mode = MODE_READPACK;
+      this._debug('%s: pushing pack', this._logDirection);
+      this._readPack(callback);
+    } else {
+      this._mode = MODE_READLINE;
+      if (!VALID_SIZE.test(stringSize)) {
+        return callback(new TypeError(`unexpected size format: "${stringSize}".`));
+      }
+
+      this._bytesToRead = Number.parseInt(stringSize, 16) - 4;
+      this._debug('%s: pushing line', this._logDirection);
+      this._readLine(callback);
+    }
+  }
+
+  _readLine(callback) {
+
+    if (this._data.length < this._bytesToRead) {
+      return callback();
+    }
+
+    const lineData = this._data.slice(0, this._bytesToRead);
+    const lineString = lineData.toString();
+    const value = lineString.trim();
+
+    this.push({type: 'line', value});
+    this._data = this._data.slice(this._bytesToRead);
+    this._bytesToRead = null;
+    this._mode = MODE_READSIZE;
+    return this._readSize(callback);
+  }
+
+  _readPack(callback) {
+    if (this._data.length === 0) {
+      return callback();
+    }
+
+    this.push({type: 'pack', value: this._data});
+    this._data = Buffer.alloc(0);
+    return callback();
   }
 
   _flush(callback) {
-
-    if (!this._emptyStream && this._readSize !== 0) {
-      callback(new Error(`didn't read 0000`));
-      return;
+    let err;
+    if (this._mode !== MODE_READPACK) {
+      err = new Error(`expected last mode to be PACK: didn't read 0000`);
     }
 
-    if (this._data.length > 0) {
-      callback(new Error(`data not empty: missing ${this._data.length} symbols '${this._data}'`));
-      return;
-    }
-
-    callback();
+    this._mode = MODE_END;
+    return callback(err);
   }
 }
