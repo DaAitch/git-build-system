@@ -6,7 +6,8 @@
   "scripts": {
     "start": "node src/index",
     "start:watch": "nodemon --no-colors src/index -w src",
-    "test": "ava"
+    "test": "ava",
+    "test:it": "ava --config it.ava.config.js"
   },
   "keywords": [],
   "author": "",
@@ -18,7 +19,9 @@
   },
   "devDependencies": {
     "ava": "^2.4.0",
+    "mkdirp": "^0.5.1",
     "nodemon": "^2.0.1",
+    "rimraf": "^3.0.0",
     "sinon": "^7.5.0"
   }
 }

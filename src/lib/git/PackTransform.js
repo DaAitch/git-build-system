@@ -48,7 +48,7 @@ module.exports = class PackTransform extends stream.Transform {
 
     if (stringSize === '0000') {
       this._mode = MODE_READPACK;
-      this._debug('%s: pushing pack', this._logDirection);
+      this._debug('pushing pack');
       this._readPack(callback);
     } else {
       this._mode = MODE_READLINE;
@@ -57,7 +57,7 @@ module.exports = class PackTransform extends stream.Transform {
       }
 
       this._bytesToRead = Number.parseInt(stringSize, 16) - 4;
-      this._debug('%s: pushing line', this._logDirection);
+      this._debug('pushing line');
       this._readLine(callback);
     }
   }
